@@ -370,6 +370,9 @@ class Command(BaseCommand):
                     # The relationship is defined in the Repo model, so we need to add the contributor to the repo
                     repo.contributor.add(contributor)
 
+                # Fetch reviews for this PR
+                self.fetch_and_save_reviews(github_issue, pr, verbose)
+
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Error saving PR #{pr['number']}: {str(e)}"))
                 skipped_count += 1
@@ -380,3 +383,82 @@ class Command(BaseCommand):
         self.stdout.write(f"Updated {updated_count} existing PRs in the database")
 
         return added_count, updated_count
+
+    def fetch_and_save_reviews(self, github_issue, pr_data, verbose=False):
+        """
+        Fetch and save reviews for a pull request.
+        """
+        # Get the reviews URL from the PR data
+        reviews_url = pr_data.get("pull_request", {}).get("url")
+        if not reviews_url:
+            return
+
+        reviews_url = reviews_url + "/reviews"
+
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        if settings.GITHUB_TOKEN:
+            headers["Authorization"] = f"token {settings.GITHUB_TOKEN}"
+
+        try:
+            response = requests.get(reviews_url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                return
+
+            reviews_data = response.json()
+            if not isinstance(reviews_data, list):
+                return
+
+            for review in reviews_data:
+                if not review.get("user"):
+                    continue
+
+                reviewer_login = review["user"].get("login")
+                reviewer_github_id = review["user"].get("id")
+                reviewer_github_url = review["user"].get("html_url")
+                reviewer_avatar_url = review["user"].get("avatar_url")
+
+                # Skip bot accounts
+                if reviewer_login and (reviewer_login.endswith("[bot]") or "bot" in reviewer_login.lower()):
+                    continue
+
+                # Get or create reviewer contributor
+                reviewer_contributor = None
+                if reviewer_github_id:
+                    reviewer_contributor, _ = Contributor.objects.get_or_create(
+                        github_id=reviewer_github_id,
+                        defaults={
+                            "name": reviewer_login,
+                            "github_url": reviewer_github_url,
+                            "avatar_url": reviewer_avatar_url,
+                            "contributor_type": "User",
+                            "contributions": 0,
+                        },
+                    )
+
+                # Check if reviewer has a UserProfile
+                reviewer_profile = None
+                if reviewer_github_url:
+                    reviewer_profile = UserProfile.objects.filter(github_url=reviewer_github_url).first()
+
+                # Create or update the review
+                GitHubReview.objects.update_or_create(
+                    review_id=review["id"],
+                    defaults={
+                        "pull_request": github_issue,
+                        "reviewer": reviewer_profile,
+                        "reviewer_contributor": reviewer_contributor,
+                        "body": review.get("body", ""),
+                        "state": review["state"],
+                        "submitted_at": datetime.strptime(review["submitted_at"], "%Y-%m-%dT%H:%M:%SZ").replace(
+                            tzinfo=pytz.UTC
+                        ),
+                        "url": review["html_url"],
+                    },
+                )
+
+                if verbose:
+                    self.stdout.write(f"  Saved review by {reviewer_login}")
+
+        except Exception as e:
+            if verbose:
+                self.stdout.write(self.style.WARNING(f"  Error fetching reviews: {str(e)}"))
