@@ -55,13 +55,25 @@ class Command(BaseCommand):
             all_repos = repos_arg.split(",")
             self.stdout.write(f"Processing specific repositories: {', '.join(all_repos)}")
         else:
-            # Flatten the list of repositories from all projects
-            all_repos = []
-            for project, repos in GSOC25_PROJECTS.items():
-                all_repos.extend(repos)
-
-            # Remove duplicates
-            all_repos = list(set(all_repos))
+            # Auto-discover BLT repos from database, or use GSOC25_PROJECTS as fallback
+            blt_repos_from_db = Repo.objects.filter(repo_url__icontains="OWASP-BLT")
+            
+            if blt_repos_from_db.exists():
+                # Extract owner/repo from database URLs
+                all_repos = []
+                for repo in blt_repos_from_db:
+                    if "github.com" in repo.repo_url:
+                        parts = repo.repo_url.split("github.com/")[-1].strip("/")
+                        all_repos.append(parts)
+                self.stdout.write(f"Auto-discovered {len(all_repos)} BLT repositories from database")
+            else:
+                # Fallback to GSOC25_PROJECTS
+                all_repos = []
+                for project, repos in GSOC25_PROJECTS.items():
+                    all_repos.extend(repos)
+                # Remove duplicates
+                all_repos = list(set(all_repos))
+                self.stdout.write(f"Using GSOC25_PROJECTS (no BLT repos found in database)")
 
         if limit:
             all_repos = all_repos[:limit]

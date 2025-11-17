@@ -47,17 +47,22 @@ Use the `Contributor` model to display ALL GitHub contributors, whether they hav
 
 ### Option 1: Fetch reviews for all BLT repos (Recommended)
 ```bash
-docker-compose exec app python manage.py fetch_all_blt_reviews --reset
+docker-compose exec app python manage.py fetch_gsoc_prs --reset
 ```
 
-This command automatically:
+When run without `--repos` argument, this command automatically:
 - Discovers all OWASP-BLT repos from the database
 - Fetches PRs and reviews from all of them
-- Shows a summary of results
+- Falls back to GSOC25_PROJECTS if no repos found in database
 
-### Option 2: Fetch reviews for specific repo
+### Option 2: Fetch reviews for specific repo(s)
 ```bash
 docker-compose exec app python manage.py fetch_gsoc_prs --repos="OWASP-BLT/BLT" --reset
+```
+
+Or multiple repos:
+```bash
+docker-compose exec app python manage.py fetch_gsoc_prs --repos="OWASP-BLT/BLT,OWASP-BLT/BLT-Flutter" --reset
 ```
 
 ### Option 3: Fetch reviews for BLT users' PRs
