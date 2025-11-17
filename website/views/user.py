@@ -92,40 +92,6 @@ def extract_github_username(github_url):
     return None
 
 
-def extract_github_username(github_url):
-    """
-    Extract GitHub username from a GitHub URL for avatar display.
-
-    Args:
-        github_url (str): GitHub URL like 'https://github.com/username' or 'https://github.com/apps/dependabot'
-
-    Returns:
-        str or None: The username part of the URL, or None if invalid/empty
-    """
-    if not github_url or not isinstance(github_url, str):
-        return None
-
-    # Strip trailing slashes and whitespace
-    github_url = github_url.strip().rstrip("/")  # Clean URL format
-
-    # Remove query parameters and fragments if present
-    github_url = github_url.split("?")[0].split("#")[0]
-
-    # Ensure URL contains at least one slash
-    if "/" not in github_url:
-        return None
-
-    # Split on "/" and get the last segment
-    segments = github_url.split("/")
-    username = segments[-1] if segments else None
-
-    # Return username only if it's non-empty and not domain parts or protocol prefixes
-    if username and username not in ["github.com", "www.github.com", "www", "http:", "https:"]:
-        return username
-
-    return None
-
-
 @receiver(user_signed_up)
 def handle_user_signup(request, user, **kwargs):
     referral_token = request.session.get("ref")
