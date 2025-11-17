@@ -391,7 +391,7 @@ class Command(BaseCommand):
         from website.models import GitHubReview
 
         # Get the reviews URL from the PR data
-        reviews_url = pr_data.get("pull_request", {}).get("url")
+        reviews_url = pr_data.get("url")
         if not reviews_url:
             return
 
