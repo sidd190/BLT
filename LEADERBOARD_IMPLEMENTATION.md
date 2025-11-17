@@ -21,15 +21,18 @@ Use the `Contributor` model to display ALL GitHub contributors, whether they hav
 
 ### 3. Management Commands
 
-#### `update_github_issues.py`
-- ✅ Already fetches reviews from **ALL reviewers** (not just BLT users)
-- Creates `Contributor` records for all reviewers
-- Links reviews to both `reviewer` (if BLT user) and `reviewer_contributor`
+#### `fetch_gsoc_prs.py` (Recommended for complete coverage)
+- ✅ Fetches **ALL PRs** from BLT repos (regardless of author)
+- ✅ Fetches reviews from **ALL reviewers** (including non-BLT users)
+- ✅ Auto-discovers BLT repos from database
+- ✅ Creates `Contributor` records for both PR authors and reviewers
 
-#### `fetch_gsoc_prs.py`
-- ✅ Updated to fetch reviews for all PRs
-- Creates `Contributor` records for reviewers
-- Fetches reviews from all GSOC/BLT repos
+#### `update_github_issues.py` (Flexible)
+- Fetches PRs **authored by BLT users** (users with GitHub profiles in system)
+- ✅ With `--all-blt-repos` flag: Also fetches **ALL PRs from BLT repos**
+- ✅ Fetches reviews from **ALL reviewers** (including non-BLT users)
+- Creates `Contributor` records for both PR authors and reviewers
+- Useful for comprehensive updates
 
 ### 4. Views (`website/views/user.py`)
 - **PR Leaderboard**: Uses `contributor` field instead of `user_profile`
@@ -44,6 +47,8 @@ Use the `Contributor` model to display ALL GitHub contributors, whether they hav
 ---
 
 ## How to Fetch All Reviews
+
+### ⭐ Recommended: Use `fetch_gsoc_prs` for complete coverage
 
 ### Option 1: Fetch reviews for all BLT repos (Recommended)
 ```bash
@@ -65,7 +70,17 @@ Or multiple repos:
 docker-compose exec app python manage.py fetch_gsoc_prs --repos="OWASP-BLT/BLT,OWASP-BLT/BLT-Flutter" --reset
 ```
 
-### Option 3: Fetch reviews for BLT users' PRs
+### Option 3: Fetch reviews for BLT users' PRs + all BLT repo PRs
+```bash
+docker-compose exec app python manage.py update_github_issues --all-blt-repos
+```
+
+This command:
+1. First fetches PRs from BLT users (users with GitHub profiles)
+2. Then fetches ALL PRs from BLT repos (including non-BLT users)
+3. Fetches reviews from all reviewers
+
+Or fetch only BLT users' PRs:
 ```bash
 docker-compose exec app python manage.py update_github_issues
 ```

@@ -13,7 +13,15 @@ from website.models import Contributor, GitHubIssue, GitHubReview, Repo, UserPro
 class Command(LoggedBaseCommand):
     help = "Fetches and updates GitHub issue and review data for users with GitHub profiles"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--all-blt-repos",
+            action="store_true",
+            help="Also fetch all PRs from BLT repos (not just from BLT users)",
+        )
+
     def handle(self, *args, **options):
+        fetch_all_blt = options.get("all_blt_repos", False)
         users_with_github = UserProfile.objects.exclude(github_url="").exclude(github_url=None)
         user_count = users_with_github.count()
 
@@ -222,3 +230,17 @@ class Command(LoggedBaseCommand):
 
         self.stdout.write("-" * 50)
         self.stdout.write(self.style.SUCCESS("GitHub data fetch completed!"))
+
+        # Optionally fetch all PRs from BLT repos (not just from BLT users)
+        if fetch_all_blt:
+            from django.core.management import call_command
+
+            self.stdout.write("")
+            self.stdout.write("=" * 50)
+            self.stdout.write(self.style.SUCCESS("Fetching all PRs from BLT repos..."))
+            self.stdout.write("=" * 50)
+            try:
+                call_command("fetch_gsoc_prs")
+                self.stdout.write(self.style.SUCCESS("Successfully fetched all BLT repo PRs!"))
+            except Exception as e:
+                self.stdout.write(self.style.ERROR(f"Error fetching BLT repo PRs: {str(e)}"))
