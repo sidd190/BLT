@@ -45,12 +45,15 @@ Use the `Contributor` model to display ALL GitHub contributors, whether they hav
 
 ## How to Fetch All Reviews
 
-### Option 1: Fetch reviews for all BLT repos
+### Option 1: Fetch reviews for all BLT repos (Recommended)
 ```bash
-docker-compose exec app python manage.py fetch_gsoc_prs \
-  --repos="OWASP-BLT/BLT,OWASP-BLT/BLT-Flutter,OWASP-BLT/BLT-Bacon,OWASP-BLT/BLT-Action,OWASP-BLT/BLT-Extension" \
-  --reset
+docker-compose exec app python manage.py fetch_all_blt_reviews --reset
 ```
+
+This command automatically:
+- Discovers all OWASP-BLT repos from the database
+- Fetches PRs and reviews from all of them
+- Shows a summary of results
 
 ### Option 2: Fetch reviews for specific repo
 ```bash
