@@ -576,7 +576,8 @@ class GlobalLeaderboardView(LeaderboardBase, ListView):
 
         context["leaderboard"] = self.get_leaderboard()[:10]  # Limit to 10 entries
 
-        # Pull Request Leaderboard - Use Contributor model, OWASP-BLT repos only
+        # Pull Request Leaderboard - Use Contributor model
+        # Dynamically filters for OWASP-BLT repos (will include any new BLT repos added to database)
         pr_leaderboard = (
             GitHubIssue.objects.filter(
                 type="pull_request",
@@ -596,7 +597,8 @@ class GlobalLeaderboardView(LeaderboardBase, ListView):
         )
         context["pr_leaderboard"] = pr_leaderboard
 
-        # Code Review Leaderboard - Use reviewer_contributor, OWASP-BLT repos only
+        # Code Review Leaderboard - Use reviewer_contributor
+        # Dynamically filters for OWASP-BLT repos (will include any new BLT repos added to database)
         reviewed_pr_leaderboard = (
             GitHubReview.objects.filter(
                 reviewer_contributor__isnull=False,
