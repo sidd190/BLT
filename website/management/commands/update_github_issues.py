@@ -137,41 +137,59 @@ class Command(LoggedBaseCommand):
                             reviews_response.raise_for_status()  # Check for HTTP errors
                             reviews_data = reviews_response.json()
 
-                            # Store reviews made by ANY user (not just the PR author)
+                            # Store ALL reviews (not just from BLT users)
                             if isinstance(reviews_data, list):
                                 for review in reviews_data:
-                                    reviewer_login = review.get("user", {}).get("login")
-                                    if reviewer_login:
-                                        # Try to find the reviewer's UserProfile
-                                        try:
-                                            # Construct the expected URL for an exact match
-                                            expected_github_url = f"https://github.com/{reviewer_login}"
-                                            reviewer_profile = UserProfile.objects.filter(
-                                                github_url__iexact=expected_github_url
-                                            ).first()
+                                    if not review.get("user"):
+                                        continue
 
-                                            if reviewer_profile:
-                                                GitHubReview.objects.update_or_create(
-                                                    review_id=review["id"],
-                                                    defaults={
-                                                        "pull_request": github_issue,
-                                                        "reviewer": reviewer_profile,  # The actual reviewer, not the PR author
-                                                        "body": review.get("body", ""),
-                                                        "state": review["state"],
-                                                        "submitted_at": timezone.make_aware(
-                                                            datetime.strptime(
-                                                                review["submitted_at"], "%Y-%m-%dT%H:%M:%SZ"
-                                                            )
-                                                        ),
-                                                        "url": review["html_url"],
-                                                    },
-                                                )
-                                        except Exception as e:
-                                            self.stdout.write(
-                                                self.style.WARNING(
-                                                    f"Could not find UserProfile for reviewer {reviewer_login}: {str(e)}"
-                                                )
-                                            )
+                                    reviewer_login = review["user"].get("login")
+                                    reviewer_github_id = review["user"].get("id")
+                                    reviewer_github_url = review["user"].get("html_url")
+                                    reviewer_avatar_url = review["user"].get("avatar_url")
+
+                                    # Skip bot accounts
+                                    if reviewer_login and (
+                                        reviewer_login.endswith("[bot]") or "bot" in reviewer_login.lower()
+                                    ):
+                                        continue
+
+                                    # Get or create reviewer contributor
+                                    reviewer_contributor = None
+                                    if reviewer_github_id:
+                                        reviewer_contributor, _ = Contributor.objects.get_or_create(
+                                            github_id=reviewer_github_id,
+                                            defaults={
+                                                "name": reviewer_login,
+                                                "github_url": reviewer_github_url,
+                                                "avatar_url": reviewer_avatar_url,
+                                                "contributor_type": "User",
+                                                "contributions": 0,
+                                            },
+                                        )
+
+                                    # Check if reviewer has a UserProfile
+                                    reviewer_profile = None
+                                    if reviewer_github_url:
+                                        reviewer_profile = UserProfile.objects.filter(
+                                            github_url=reviewer_github_url
+                                        ).first()
+
+                                    # Create or update the review
+                                    GitHubReview.objects.update_or_create(
+                                        review_id=review["id"],
+                                        defaults={
+                                            "pull_request": github_issue,
+                                            "reviewer": reviewer_profile,
+                                            "reviewer_contributor": reviewer_contributor,
+                                            "body": review.get("body", ""),
+                                            "state": review["state"],
+                                            "submitted_at": timezone.make_aware(
+                                                datetime.strptime(review["submitted_at"], "%Y-%m-%dT%H:%M:%SZ")
+                                            ),
+                                            "url": review["html_url"],
+                                        },
+                                    )
                         except requests.exceptions.RequestException as e:
                             self.stdout.write(
                                 self.style.ERROR(f"Error fetching reviews for PR {pr['number']}: {str(e)}")
