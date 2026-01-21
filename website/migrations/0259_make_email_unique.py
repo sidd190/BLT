@@ -24,34 +24,44 @@ def remove_duplicate_users(apps, schema_editor):
     User = apps.get_model("auth", "User")
     db_alias = schema_editor.connection.alias
 
-    # Find all duplicate emails
-    # IMPORTANT: Exclude empty strings and NULL values to avoid treating
-    # multiple users with empty/NULL emails as duplicates
-    duplicate_emails = (
+    # OPTIMIZATION: Get duplicate emails data in a single query
+    duplicate_emails_data = list(
         User.objects.using(db_alias)
         .exclude(email="")
         .exclude(email__isnull=True)
         .values("email")
         .annotate(email_count=Count("id"))
         .filter(email_count__gt=1)
-        .values_list("email", flat=True)
     )
 
+    if not duplicate_emails_data:
+        logger.info("No duplicate users found")
+        return
+
+    # OPTIMIZATION: Batch fetch all users with duplicate emails to eliminate N+1 queries
+    duplicate_email_list = [item["email"] for item in duplicate_emails_data]
+    all_duplicate_users = (
+        User.objects.using(db_alias).filter(email__in=duplicate_email_list).select_related().order_by("email", "id")
+    )
+
+    # Group users by email for efficient processing
+    users_by_email = {}
+    for user in all_duplicate_users:
+        if user.email not in users_by_email:
+            users_by_email[user.email] = []
+        users_by_email[user.email].append(user)
+
     total_deleted = 0
-    for email in duplicate_emails:
-        # Get all users with this email, ordered by ID
-        users_with_email = User.objects.using(db_alias).filter(email=email).order_by("id")
+    for email_data in duplicate_emails_data:
+        email = email_data["email"]
+        users_with_email = users_by_email.get(email, [])
+
+        if len(users_with_email) <= 1:
+            continue  # Skip if no duplicates (shouldn't happen, but be safe)
 
         # Keep the first user (lowest ID), delete the rest
-        kept_user = users_with_email.first()
-
-        # Edge case: if no users found (shouldn't happen, but be safe)
-        if not kept_user:
-            logger.warning(f"No users found for email '{email}', skipping")
-            continue
-
-        # Convert QuerySet slice to list to avoid issues with deleting while iterating
-        duplicate_users = list(users_with_email[1:])
+        kept_user = users_with_email[0]
+        duplicate_users = users_with_email[1:]
 
         for user in duplicate_users:
             logger.info(

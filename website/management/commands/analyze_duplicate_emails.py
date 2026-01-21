@@ -8,6 +8,7 @@ Usage:
 
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.db.models import Count
 
 
@@ -21,6 +22,7 @@ class Command(BaseCommand):
             help="Show detailed information about each duplicate",
         )
 
+    @transaction.atomic
     def handle(self, *args, **options):
         detailed = options["detailed"]
 
@@ -58,6 +60,20 @@ class Command(BaseCommand):
             )
         )
 
+        # OPTIMIZATION: Batch fetch all users with duplicate emails to eliminate N+1 queries
+        if detailed:
+            duplicate_email_list = [d["email"] for d in duplicate_emails]
+            users_with_duplicates = (
+                User.objects.filter(email__in=duplicate_email_list).select_related().order_by("email", "id")
+            )
+
+            # Group users by email for efficient processing
+            users_by_email = {}
+            for user in users_with_duplicates:
+                if user.email not in users_by_email:
+                    users_by_email[user.email] = []
+                users_by_email[user.email].append(user)
+
         for dup in duplicate_emails:
             email = dup["email"]
             count = dup["email_count"]
@@ -67,19 +83,20 @@ class Command(BaseCommand):
             self.stdout.write(f"  Users to DELETE: {count - 1}")
 
             if detailed:
-                users = User.objects.filter(email=email).order_by("id")
-                kept_user = users.first()
+                users = users_by_email.get(email, [])
+                if users:
+                    kept_user = users[0]  # First user (lowest ID) will be kept
 
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"  ✓ KEEP: {kept_user.username} (ID: {kept_user.id}, joined: {kept_user.date_joined})"
-                    )
-                )
-
-                for user in users[1:]:
                     self.stdout.write(
-                        self.style.ERROR(f"  ✗ DELETE: {user.username} (ID: {user.id}, joined: {user.date_joined})")
+                        self.style.SUCCESS(
+                            f"  ✓ KEEP: {kept_user.username} (ID: {kept_user.id}, joined: {kept_user.date_joined})"
+                        )
                     )
+
+                    for user in users[1:]:
+                        self.stdout.write(
+                            self.style.ERROR(f"  ✗ DELETE: {user.username} (ID: {user.id}, joined: {user.date_joined})")
+                        )
 
         # Report on empty string emails
         if empty_email_count > 0:
